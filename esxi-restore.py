@@ -341,8 +341,8 @@ def createVMKernelPorts():
 
     for vmkPortName in vmkports:
         command = 'esxcli network ip interface add -i ' + str(vmkports[vmkPortName]) + ' -p ' + '"' + str(vmkPortName) + '" -m 9000'
-	os.system(command)
-	output = os.popen(command).readlines()
+        os.system(command)
+        output = os.popen(command).readlines()	    
         
 
         # os.system('esxcli network ip interface add -i ' + vmkports[vmkPortName] + ' -p ' + '"' + vmkPortName + '" -m 9000')
