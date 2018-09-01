@@ -3,6 +3,7 @@ import sys
 import subprocess
 import re            
 import getpass  
+import string
 
 network_info = {}
 vSwitches = ['vswitch-hx-storage-data', 'vswitch-hx-vm-network']
@@ -117,10 +118,20 @@ def get_network_info():
         print('     ' + i)
     
     print('\n')
-    for network in get_vlans_for_networks:
-        print("What is the VLAN # for "+network+"?")
-        network_info[network] = input()
+    for network in get_vlans_for_networks:        
+        if python_version == 2:
+            network_info[network] = raw_input("What is the VLAN # for "+network+"?\n")
+            while not validateInts(network_info[network]):
+                print('     The VLAN you input is invalid. Please input a valid VLAN')
+                network_info[network] = raw_input("What is the VLAN # for "+network+"?\n")
+        elif python_version == 3:
+            print("What is the VLAN # for "+network+"?")
+            network_info[network] = input()
+            while not validateInts(network_info[network]):
+                print('     The VLAN you input is invalid. Please input a valid VLAN')
+                network_info[network] = input()
         setVlanMapping(network, network_info[network])
+        
 
 	# for network in get_vlans_for_networks::
 	# 	print("What is the VLAN # for "+network+"?")
@@ -128,7 +139,6 @@ def get_network_info():
 
     for vmk in get_vmk_ip:
         if(python_version == 2):
-            print("In python 2")
             print("VMK: " + vmk)
             vmk_network_info1 = raw_input("What is the IP address for " + vmk + "? ")
             network_info[vmk] = str(vmk_network_info1)
@@ -141,7 +151,6 @@ def get_network_info():
             network_info[(vmk+' - Gateway')] = raw_input("What is the gateway? ")
             # network_info[(vmk+' - Gateway')] = str(network_info[(vmk+' - Gateway')])
         elif(python_version == 3):
-            print("In python 3")
             print("What is the IP address for " + vmk + "?")
             network_info[vmk] = input()
             print("What is the netmask?")
@@ -202,6 +211,9 @@ def get_network_info():
             print('     ', vswitch)
     print('\n')
     print('----- End Configuration -----')
+
+def validateInts(input):
+    return bool(re.match('^[0-9]+$', input))
 
 def get_inband_mgmt_vswitch():
 	# Confirm that vswitch-hx-inband-mgmt is available
@@ -356,6 +368,7 @@ def assignIpToVmkernel():
     if python_version == 2:
         for vmk in get_vmk_ip:
             command = 'esxcli network ip interface ipv4 set -i vmk' + str(counter) + ' -I ' + network_info[vmk] + ' -N ' + network_info[vmk + ' - Netmask'] + ' -t static '
+            print(command + '\n')
             os.system(command)
             counter+=1
     elif python_version == 3:
