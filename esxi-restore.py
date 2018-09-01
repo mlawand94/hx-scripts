@@ -132,31 +132,49 @@ def get_network_info():
                 network_info[network] = input()
         setVlanMapping(network, network_info[network])
         
-
-	# for network in get_vlans_for_networks::
-	# 	print("What is the VLAN # for "+network+"?")
-	# 	network_info[network] = input()
-
     for vmk in get_vmk_ip:
         if(python_version == 2):
             print("VMK: " + vmk)
-            vmk_network_info1 = raw_input("What is the IP address for " + vmk + "? ")
+            vmk_network_info1 = raw_input("What is the IP address for " + vmk + "? ")            
+            while not validateIP(vmk_network_info1):
+                print(vmk_network_info1 + " is a invalid IP address. Please try again.")
+                vmk_network_info1 = raw_input("What is the IP address for " + vmk + "? ")
             network_info[vmk] = str(vmk_network_info1)
 
-            # network_info[vmk] = network_info[string(vmk)]
 
-            network_info[(vmk+' - Netmask')] = raw_input("What is the netmask? ")
-            # network_info[(vmk+' - Netmask')] = str(network_info[(vmk+' - Netmask')])
+            netmask = raw_input("What is the netmask? ")
+            while not validateIP(netmask):
+                print(netmask + " is a invalid IP address. Please try again")
+                netmask = raw_input("What is the netmask? ")
+            network_info[(vmk+' - Netmask')] = netmask
 
-            network_info[(vmk+' - Gateway')] = raw_input("What is the gateway? ")
+            gw = raw_input("What is the gateway? ")
+            while not validateIP(gw):
+                print(gw + ' is not a valid IP address. Please try again')
+                gw = raw_input("What is the gateway? ")
+            network_info[(vmk+' - Gateway')] = gw
             # network_info[(vmk+' - Gateway')] = str(network_info[(vmk+' - Gateway')])
         elif(python_version == 3):
             print("What is the IP address for " + vmk + "?")
-            network_info[vmk] = input()
+            ip = input()
+            while not validateIP(ip):
+                print(ip + ' is an invalid IP. Please try again.')
+                ip = input()
+            network_info[vmk] = ip
+            
             print("What is the netmask?")
-            network_info[(vmk+' - Netmask')] = input()
+            nm = input()
+            while not validateIP(nm):
+                print(nm + ' is an invalid IP. Please try again')
+                nm = input()
+            network_info[(vmk+' - Netmask')] = nm
+            
             print("What is the gateway?")
-            network_info[(vmk+' - Gateway')] = input()
+            gw = input()
+            while not validateIP(gw):
+                print(gw + ' is an invalid IP. Please try again.')
+                gw = input()
+            network_info[(vmk+' - Gateway')] = gw
         
     ##########################
     #  Print Network Config  #
@@ -211,6 +229,9 @@ def get_network_info():
             print('     ', vswitch)
     print('\n')
     print('----- End Configuration -----')
+
+def validateIP(ip):
+    return bool(re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$",ip))
 
 def validateInts(input):
     return bool(re.match('^[0-9]+$', input))
