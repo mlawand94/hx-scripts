@@ -1,4 +1,15 @@
-import os                                                                                                             
+#  This script restores the networking settings for a storage controller virtual machine on a HyperFlex ESXi host.
+# The script should be used if:
+#   1. ESXi was re-imaged on a 240 M5 or M4 HCS HX Node
+#   2. Something or someone accidentally changed the ESXi host network settings and it needs to be restored.
+#
+# How to use:
+#   1. Put the script on the affected host via FTP/SCP
+#   2. Run the command, 'py esxi-restore.py'
+#   3. Input all of the IP addresses that is requested for that host
+
+
+import os
 import sys                                                                                                            
 import subprocess
 import re            
