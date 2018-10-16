@@ -371,7 +371,7 @@ def vmnicsToActiveStandby():
                     # command = "esxcli network vswitch standard policy failover set -a " + str(previous_vmnic) + ' -s ' + str(vmnic) + ' -v ' + get_vmnic_mapping_by_key(vmnic)
                 elif(counter == 3):
                     vmnic_mapping = 'vswitch-hx-storage-data'
-                    print("esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping)
+                    print("esxcli network vswitch standard policy failover set -s vmnic" + str(counter-1) + ' -a vmnic' + str(counter) + ' -v ' + vmnic_mapping)
                     command = "esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping
                 os.system(command)
                 counter +=1
