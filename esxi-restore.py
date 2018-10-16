@@ -75,6 +75,9 @@ def get_network_info():
         get_vmk_ip.append('vmotion (vmk2)')
         set_vmk_port_mapping('vmotion','vmk2')
         setPortGroupMapping('vmotion', 'vmotion')
+        set_vmnic_mapping('vmnic6', vmotion_vswitch_name)
+        set_vmnic_mapping('vmnic7', vmotion_vswitch_name)
+                
 	############################################## End DVS Configuration #############################################
 	
     ############################################# ISCSI Configuration #############################################
@@ -162,7 +165,7 @@ def get_network_info():
             gw = raw_input("What is the gateway? Input 0.0.0.0 if no G/W")
             while not validateIP(gw):
                 print(gw + ' is not a valid IP address. Please try again')
-                gw = raw_input("What is the gateway? Input 0.0.0.0 if no G/W")
+                gw = raw_input("What is the gateway? ")
             network_info[(vmk+' - Gateway')] = gw
             # network_info[(vmk+' - Gateway')] = str(network_info[(vmk+' - Gateway')])
         elif(python_version == 3):
@@ -289,15 +292,12 @@ def createvSwitches():
 		if str(output) == "[]":
 			print(vSwitch + " added")
 
-def enableJumboFrames(contains_vmotion_dvs):
+def enableJumboFrames():
     for vswitch in vSwitches:
         print('Enabling Jumbo frames for vswitch: ' + vswitch)
         os.system('esxcli network vswitch standard set -m 9000 -v ' + vswitch)
 
 def set_vmnic_mapping(vmnic, vswitch):
-    print("vmnic mapping:")
-    print(vmnic)
-    print(vswitch)
     vmnic_mapping[vmnic] = vswitch
     configured_vmnics.append(vmnic)
 
@@ -315,6 +315,7 @@ def addVmnics(inband_mgmt_vswitch):
     vswitch_index = 0
 
     for vswitch in vSwitch_to_vnic:
+        print('vswitch: ' + vswitch)
         if vswitch_index == 0:
             command = 'esxcli network vswitch standard uplink add -u vmnic' + str(vmnic) + ' -v ' + str(vSwitch_to_vnic[vswitch_index])
             set_vmnic_mapping('vmnic' + str(vmnic), vSwitch_to_vnic[vswitch_index])
@@ -322,6 +323,7 @@ def addVmnics(inband_mgmt_vswitch):
             # vmnic +=1
             os.system(command)
         elif vswitch_index != 0 and vmnic != 0: 
+            print('vswitch: ' + vswitch)
             vmnic += 1
             print('Setting vmnic' + str(vmnic) + ' to ' + vSwitch_to_vnic[vswitch_index])
             command = 'esxcli network vswitch standard uplink add -u vmnic' + str(vmnic) + ' -v ' + str(vSwitch_to_vnic[vswitch_index])
@@ -340,25 +342,44 @@ def addVmnics(inband_mgmt_vswitch):
 def vmnicsToActiveStandby():
 
     print(get_vmnic_mapping())
+
     print(configured_vmnics)
     configured_vmnics.insert(0,'vmnic0')
     counter = 0
     previous_vmnic = ''
+    command = ''
     for vmnic in configured_vmnics:
-        print("vmnic: " + vmnic)
-        if counter % 2 == 1:
-            if(vmnic == 'vmnic1' and get_vmnic_mapping_by_key(vmnic) == None):
-                vmnic_mapping = 'vswitch-hx-inband-mgmt'
-                print("esxcli network vswitch standard policy failover set -a " + previous_vmnic + ' -s ' + vmnic + ' -v ' + vmnic_mapping)
-                command = "esxcli network vswitch standard policy failover set -a " + str(previous_vmnic) + ' -s ' + str(vmnic) + ' -v ' + vmnic_mapping
-            else:
-                print("esxcli network vswitch standard policy failover set -a " + previous_vmnic + ' -s ' + vmnic + ' -v ' + get_vmnic_mapping_by_key(vmnic))
-                command = "esxcli network vswitch standard policy failover set -a " + str(previous_vmnic) + ' -s ' + str(vmnic) + ' -v ' + get_vmnic_mapping_by_key(vmnic)
+        if counter <= len(configured_vmnics):
+            if counter % 2 == 1:
+                if(counter == 1):
+                    vmnic_mapping = 'vswitch-hx-inband-mgmt'
+                    print("esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping)
+                    command = "esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping
+                    # print("esxcli network vswitch standard policy failover set -a " + previous_vmnic + ' -s ' + vmnic + ' -v ' + vmnic_mapping)
+                    # command = "esxcli network vswitch standard policy failover set -a " + str(previous_vmnic) + ' -s ' + str(vmnic) + ' -v ' + vmnic_mapping
+                elif(counter == 5):
+                    vmnic_mapping = 'vswitch-hx-vm-network'
+                    print('esxcli network vswitch standard policy failover set -a vmnic' + str(counter-1) + ',vmnic' + str(counter) + ' -v ' + vmnic_mapping)
+                    command = 'esxcli network vswitch standard policy failover set -a vmnic' + str(counter-1) + ',vmnic' + str(counter) + ' -v ' + vmnic_mapping
+                    # print('esxcli network vswitch standard policy failover set -a ' + previous_vmnic + ',' + vmnic + ' -v ' + vmnic_mapping)
+                    # command = 'esxcli network vswitch standard policy failover set -a ' + str(previous_vmnic) + ',' + str(vmnic) + ' -v ' + vmnic_mapping
+                elif(counter == 7):
+                    vmnic_mapping = 'vmotion'
+                    print("esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping)
+                    command = "esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping
+                    # print("esxcli network vswitch standard policy failover set -a " + previous_vmnic + ' -s ' + vmnic + ' -v ' + get_vmnic_mapping_by_key(vmnic))
+                    # command = "esxcli network vswitch standard policy failover set -a " + str(previous_vmnic) + ' -s ' + str(vmnic) + ' -v ' + get_vmnic_mapping_by_key(vmnic)
+                elif(counter == 3):
+                    vmnic_mapping = 'vswitch-hx-storage-data'
+                    print("esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping)
+                    command = "esxcli network vswitch standard policy failover set -a vmnic" + str(counter-1) + ' -s vmnic' + str(counter) + ' -v ' + vmnic_mapping
                 os.system(command)
                 counter +=1
+            else:
+                previous_vmnic = str(vmnic)
+                counter += 1
         else:
-            previous_vmnic = str(vmnic)
-            counter += 1
+            print("counter is bigger than the size of configured vmnic")
 
 
 def createPortGroups():
@@ -384,11 +405,13 @@ def createVMKernelPorts():
     vmkports = get_vmk_port_mapping()
 
     for vmkPortName in vmkports:
-        command = 'esxcli network ip interface add -i ' + str(vmkports[vmkPortName]) + ' -p ' + '"' + str(vmkPortName) + '" -m 9000'
-        os.system(command)
-        output = os.popen(command).readlines()	    
-        
-
+        if vmkPortName == 'Management Network':
+            print("Skipping configuration of vmk0.. not needed.")
+        else:
+            command = 'esxcli network ip interface add -i ' + str(vmkports[vmkPortName]) + ' -p ' + '"' + str(vmkPortName) + '" -m 9000'
+            print(command)
+            os.system(command)
+            output = os.popen(command).readlines()                  
         # os.system('esxcli network ip interface add -i ' + vmkports[vmkPortName] + ' -p ' + '"' + vmkPortName + '" -m 9000')
         # print('esxcli network ip interface add -i ' + vmkports[vmkPortName] + ' -p ' + '"' + vmkPortName + '" -m 9000')
 
@@ -445,12 +468,13 @@ def main():
 #    set_vmnic_mapping('vmnic1', inband_mgmt_vswitch)
     get_network_info()
     createvSwitches()
-    addVmnics(inband_mgmt_vswitch)
-    vmnicsToActiveStandby()
+    addVmnics(inband_mgmt_vswitch)    
     createPortGroups()
     setVLANS()
     createVMKernelPorts()
     assignIpToVmkernel()
+    vmnicsToActiveStandby()
+    enableJumboFrames()
 
 if __name__ == "__main__":
     main()
