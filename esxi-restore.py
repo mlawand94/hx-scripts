@@ -162,7 +162,7 @@ def get_network_info():
             gw = raw_input("What is the gateway? Input 0.0.0.0 if no G/W")
             while not validateIP(gw):
                 print(gw + ' is not a valid IP address. Please try again')
-                gw = raw_input("What is the gateway? ")
+                gw = raw_input("What is the gateway? Input 0.0.0.0 if no G/W")
             network_info[(vmk+' - Gateway')] = gw
             # network_info[(vmk+' - Gateway')] = str(network_info[(vmk+' - Gateway')])
         elif(python_version == 3):
