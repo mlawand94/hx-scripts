@@ -153,13 +153,13 @@ def get_network_info():
             network_info[vmk] = str(vmk_network_info1)
 
 
-            netmask = raw_input("What is the netmask? ")
+            netmask = raw_input("What is the netmask?")
             while not validateIP(netmask):
                 print(netmask + " is a invalid IP address. Please try again")
                 netmask = raw_input("What is the netmask? ")
             network_info[(vmk+' - Netmask')] = netmask
 
-            gw = raw_input("What is the gateway? ")
+            gw = raw_input("What is the gateway? Input 0.0.0.0 if no G/W")
             while not validateIP(gw):
                 print(gw + ' is not a valid IP address. Please try again')
                 gw = raw_input("What is the gateway? ")
@@ -180,7 +180,7 @@ def get_network_info():
                 nm = input()
             network_info[(vmk+' - Netmask')] = nm
             
-            print("What is the gateway?")
+            print("What is the gateway? Input 0.0.0.0 if no G/W")
             gw = input()
             while not validateIP(gw):
                 print(gw + ' is an invalid IP. Please try again.')
