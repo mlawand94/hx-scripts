@@ -19,11 +19,28 @@ def relinquishSCVM():
         # Python 3 function
         print("Python 3 command")
 
+def sshIntoSCVM():
+    command = 'ssh root@`/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"` -i /etc/ssh/ssh_host_rsa_key'    
+    # os.system(command)        
+    # output = subprocess.Popen(command).readlines()
+    import subprocess  
+    output = subprocess.Popen(command, shell=True)  
+    counter = 0
+    # for line in output:
+    #     print('Counter: ' + counter + ': ' + line)
+    #     if (re.match(r'(.*)sure you want to continue connecting(.*)'), line):
+    #         print(" We can hit yes now")
+    #         os.system('yes')
+    # print(output)
+    
+
+
 def main():
     # Get Python version of the ESXi host
     getPythonVersion()
     # SSH into the VM and relinquish from cluster
         # https://techzone.cisco.com/t5/HyperFlex/Password-Recovery-for-STCTLVM/ta-p/988028
+    sshIntoSCVM()
     # Power off the SCVM
     # Delete the SCVM
         # Destroy the SCVM
