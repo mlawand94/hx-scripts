@@ -4,7 +4,8 @@ import subprocess
 import re
 import getpass
 import string
-
+import time
+from itertools import islice
 
 
 def getPythonVersion():
@@ -19,20 +20,62 @@ def relinquishSCVM():
         # Python 3 function
         print("Python 3 command")
 
-def sshIntoSCVM():
-    command = 'ssh root@`/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"` -i /etc/ssh/ssh_host_rsa_key'    
-    # os.system(command)        
-    # output = subprocess.Popen(command).readlines()
-    import subprocess  
-    output = subprocess.Popen(command, shell=True)  
-    counter = 0
-    # for line in output:
-    #     print('Counter: ' + counter + ': ' + line)
-    #     if (re.match(r'(.*)sure you want to continue connecting(.*)'), line):
-    #         print(" We can hit yes now")
-    #         os.system('yes')
-    # print(output)
+def sshIntoSCVM():    
+    # Getting IP address of the Storage Controller VM
+    output = os.popen('/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"').readlines()
+    output = re.finditer(r'[0-9.]',str(output), re.MULTILINE)
+    ip = ''
+    for matchNum, match in enumerate(output):        
+        ip += match.group()
     
+    # Check for VM's other than the storage controller VM on the node.
+    command = "vim-cmd vmsvc/getallvms | sed -n '1!p' | wc -l"
+    output = os.popen(command)
+    numberOfLines = int(output.read())
+    output.close()
+
+    command = "vim-cmd vmsvc/getallvms | sed -n '1!p'"
+    output = os.popen(command)
+    vm_list = output.read()    
+    output.close()
+
+    if numberOfLines == 1:
+        vm_list = vm_list.split(" ")
+        vm_id = vm_list[0]
+        vm_name = vm_list[6]        
+    else:
+        print("Please migrate all of the VM's off of the node before continuing. Do not migrate the SCVM")
+    
+    # Check to see if the VM is powered off    
+    command = 'vim-cmd vmsvc/power.get ' + vm_id + " | sed -n '1!p'"
+    output = os.popen(command)
+    power_state = output.read()
+    power_state = str(power_state.split(" ")[1].strip())
+    output.close()
+    
+    if power_state == "on":
+        print("Has the SCVM been relinquished? Input 1 for yes and 0 for no")
+        scvm_relinquished = input()
+        if scvm_relinquished == "1":            
+            powerOffSCVM(vm_id)
+        elif scvm_relinquished == "0":
+            print("Please relinquish the SCVM from the cluster before proceeding.")
+            print("SSH into the storage controller VM as root. ssh root@" + ip)
+            print("Issue the command: python /usr/share/springpath/storfs-misc/relinquish_node.py ")
+    
+    
+def powerOffSCVM(vm_id):
+    vm_id = vm_id
+    print("powering off SCVM ...")
+    command = 'vim-cmd vmsvc/power.off ' + str(vm_id)
+    output = os.popen(command)
+    result = output.read()
+    time.sleep(15)
+    
+    command = "vim-cmd vmsvc/power.get " + str(vm_id) + " | sed -n '1!p'"
+    output = os.popen(command)
+    result = str(output.read()).split(" ").strip()
+    print(result)
 
 
 def main():
