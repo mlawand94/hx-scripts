@@ -111,14 +111,102 @@ def deletePortGroups():
     for index in portgroup_list:
         print(index["name"])
         print(index["Virtual Switch"])
-        command = 'esxcli network vswitch standard portgroup remove -v '+index['Virtual Switch']+' -p "'+index['name']+'"'
-        print(command)
-        print("\n")
+        if(index["Virtual Switch"] == "Management Network"):
+            print("Skipping deletion of the management network")
+        else:
+            command = 'esxcli network vswitch standard portgroup remove -v '+index['Virtual Switch']+' -p "'+index['name']+'"'
+            print(command)
+    
+    command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p' | wc -l"
+    output = os.popen(command)
+    result = output.read()
+    result = str(result).strip()    
+    if int(result) == 11:
+        print("All port groups have been deleted.. Moving on to delete the vswitches")
+        deleteVswitches(portgroup_list)
+        output.close()
+    else:
+        print("There was a problem with deleting the port groups from the vswitches. Please delete the port groups from the vswitches and try again.")
+
+    
     # pprint(len(portgroup_list))
                 
 
     # result = result.split("  ")
     # print(result)
+
+def deleteVswitches(portgroup_list):
+    print("Deleting the vswitches")
+    for index in portgroup_list:
+        print(index["Virtual Switch"])
+        if index["Virtual Switch"] == "vswitch-hx-inband-mgmt":
+            print("Skipping vswitch-hx-inband-mgmt")
+        else:
+            command = 'esxcli network vswitch standard remove -v "'+index["Virtual Switch"]+'"'
+            print(command)
+
+    # Verify that vswitches have been deleted
+    verification_command = 'esxcli network vswitch standard list | grep -i Name | wc -l'
+    output = os.popen(verification_command)
+    result = output.read()
+    result = str(result).strip()
+
+    if int(result) == 5:
+        print("All vswitches have been deleted. Proceed to delete VMK2")
+        deleteVMKs()
+
+def deleteVMKs():
+    print("In the delete vmk's function")
+    command = 'esxcli network ip interface list | grep "Name: vmk*"'
+    output = os.popen(command)
+    result = output.readlines()
+    for line in result:
+        line = line.split(" ")
+        for index in line:
+            if index != '':
+                if "vmk" in str(index):
+                    index = str(index).strip()
+                    if int(index[3]) >= 1:
+                        command = "esxcli network ip interface remove -i " + index
+                        print(command)
+                        verification_command = 'esxcli network ip interface list | grep "Name: vmk*" | wc -l'
+                        output = os.popen(verification_command)
+                        result = output.read()                        
+                        result = str(result).strip()
+                        if int(result) == 2:
+                            output.close()
+                            deleteOrphanedSCVM()
+
+def deleteOrphanedSCVM():
+    print("Please delete the orphaned SCVM from VCenter... Press 1 when this has been complete")
+    deletedOrphanVm = input()
+    if int(deletedOrphanVm) == 1:
+        deleteDataStores()
+    else:
+        print("Please remove the orphaned VM and run this script again")
+
+listOfDataStores = []
+setOfDataStores = {}
+def deleteDataStores():
+    print("Starting datastore deletion")
+    command = "grep -i nas /etc/vmware/esx.conf"
+    output = os.popen(command)
+    result = output.readlines()
+    for line in result:
+        if "STFSNasPlugin" in line:
+            print("Not deleting " + line)
+        else:
+            line = line.split("/")
+            # print(line[2])
+            listOfDataStores.append(str(line[2]))
+    setOfDataStores = set(listOfDataStores)
+    if len(setOfDataStores) >= 1:
+        for ds in setOfDataStores:
+            command = "esxcfg-nas -d " + ds
+            print(command)
+
+
+    # esxcli network vswitch standard remove -v "asdf"
 
 def main():
     # Get Python version of the ESXi host
@@ -136,6 +224,7 @@ def main():
     # Remove the vswitches
         # List them all and remove them all
             # esxcli network vswitch standard list | grep -i name
+    # deleteVswitches()
     # Remove the vmotion vmkernel interface (vmk2)
     # Prompt user to delete the orphaned vm's from vc inventory - proceed when done
     # List all datastores and delete them from the host
