@@ -6,6 +6,8 @@ import getpass
 import string
 import time
 from itertools import islice
+import json
+from pprint import pprint
 
 
 def getPythonVersion():
@@ -43,25 +45,26 @@ def sshIntoSCVM():
         vm_list = vm_list.split(" ")
         vm_id = vm_list[0]
         vm_name = vm_list[6]        
+        # Check to see if the VM is powered off    
+        command = 'vim-cmd vmsvc/power.get ' + vm_id + " | sed -n '1!p'"
+        output = os.popen(command)
+        power_state = output.read()
+        power_state = str(power_state.split(" ")[1].strip())
+        output.close()
+        
+        if power_state == "on":
+            print("Has the SCVM been relinquished? Input 1 for yes and 0 for no")
+            scvm_relinquished = input()
+            if scvm_relinquished == "1":            
+                powerOffSCVM(vm_id)
+            elif scvm_relinquished == "0":
+                print("Please relinquish the SCVM from the cluster before proceeding.")
+                print("SSH into the storage controller VM as root. ssh root@" + ip)
+                print("Issue the command: python /usr/share/springpath/storfs-misc/relinquish_node.py ")
+        
     else:
         print("Please migrate all of the VM's off of the node before continuing. Do not migrate the SCVM")
     
-    # Check to see if the VM is powered off    
-    command = 'vim-cmd vmsvc/power.get ' + vm_id + " | sed -n '1!p'"
-    output = os.popen(command)
-    power_state = output.read()
-    power_state = str(power_state.split(" ")[1].strip())
-    output.close()
-    
-    if power_state == "on":
-        print("Has the SCVM been relinquished? Input 1 for yes and 0 for no")
-        scvm_relinquished = input()
-        if scvm_relinquished == "1":            
-            powerOffSCVM(vm_id)
-        elif scvm_relinquished == "0":
-            print("Please relinquish the SCVM from the cluster before proceeding.")
-            print("SSH into the storage controller VM as root. ssh root@" + ip)
-            print("Issue the command: python /usr/share/springpath/storfs-misc/relinquish_node.py ")
     
     
 def powerOffSCVM(vm_id):
@@ -74,22 +77,62 @@ def powerOffSCVM(vm_id):
     
     command = "vim-cmd vmsvc/power.get " + str(vm_id) + " | sed -n '1!p'"
     output = os.popen(command)
-    result = str(output.read()).split(" ").strip()
-    print(result)
+    result = str(output.read()).split(" ")[1].strip()
+    if result == "off":
+        destroySCVM(vm_id)
+    
+def destroySCVM(vm_id):
+    command = 'vim-cmd vmsvc/destroy 1'
 
+portgroup_list = []
+
+def deletePortGroups():
+    command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p'"
+    output = os.popen(command)
+    result = output.readlines()
+    listCounter = 0
+    for line in result:
+        line = line.split("  ")
+        listCounter = listCounter + 1        
+        counter = 0
+        vswitch_port_group_list = {}
+        for index in line:            
+            if (index is not ''):
+                counter = counter + 1
+                if counter == 1:
+                    vswitch_port_group_list["name"] = index.strip()
+                if counter == 2:
+                    vswitch_port_group_list["Virtual Switch"] = index.strip()
+                if counter == 3:
+                    vswitch_port_group_list["Active Clients"] = index.strip()
+                if counter == 4: 
+                    vswitch_port_group_list["VLAN ID"] = index.strip()
+        portgroup_list.insert(listCounter, vswitch_port_group_list)
+    for index in portgroup_list:
+        print(index["name"])
+        print(index["Virtual Switch"])
+        command = 'esxcli network vswitch standard portgroup remove -v '+index['Virtual Switch']+' -p "'+index['name']+'"'
+        print(command)
+        print("\n")
+    # pprint(len(portgroup_list))
+                
+
+    # result = result.split("  ")
+    # print(result)
 
 def main():
     # Get Python version of the ESXi host
-    getPythonVersion()
+    # getPythonVersion()
     # SSH into the VM and relinquish from cluster
         # https://techzone.cisco.com/t5/HyperFlex/Password-Recovery-for-STCTLVM/ta-p/988028
-    sshIntoSCVM()
+    # sshIntoSCVM()
     # Power off the SCVM
     # Delete the SCVM
         # Destroy the SCVM
         # Make sure the /vmfs/volumes/StCtlVm dir is empty
     # Get all port groups and remove them
         # Do NOT remove vswitch-hx-inband-mgmt    
+    deletePortGroups()
     # Remove the vswitches
         # List them all and remove them all
             # esxcli network vswitch standard list | grep -i name
