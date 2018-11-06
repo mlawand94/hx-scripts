@@ -204,8 +204,43 @@ def deleteDataStores():
         for ds in setOfDataStores:
             command = "esxcfg-nas -d " + ds
             print(command)
-
-
+        cleanBackSSD()
+filesystem_list = []
+ssd_cleanup_commands = ['esxcli system coredump file remove --force', 'esxcfg-dumppart -d', 'rm /scratch', ]
+def cleanBackSSD():
+    counter = 0
+    command = 'esxcli storage filesystem list'
+    output = os.popen(command)
+    result = output.readlines()
+    for line in result:
+        # print(line)
+        if('SpringpathDS' in line):
+            line = line.split(" ")
+            for index in line:
+                if index is not '':
+                    counter = counter+1
+                    filesystem_list.insert(counter, index)
+            uuid = filesystem_list[2]
+            print(uuid)
+    command2 = 'esxcli system coredump file remove --force'
+    command3 = 'esxcfg-dumppart -d'
+    command4 = 'rm /scratch'
+    command5 = 'ps | grep vmsyslogd'
+    output = os.popen(command5)
+    result = output.readlines()
+    zibby = []
+    zibCount = 0
+    for line in result:
+        line = line.split(" ")
+        for index in line:
+            if index is not '':
+                zibCount = zibCount + 1
+                zibby.insert(zibCount, index)
+    process = zibby[1]
+    command6 = 'kill -9 ' + str(process)
+    command7 = 'esxcli storage filsystem unmount -p /vmfs/volumes/' + str(uuid)
+    # Get the hardware to confirm how we will be cleaning the SSD's
+    command8 = 'esxcli hardware platform get | grep -i "product name"'
     # esxcli network vswitch standard remove -v "asdf"
 
 def main():
