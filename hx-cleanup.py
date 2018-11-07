@@ -31,6 +31,7 @@ def sshIntoSCVM():
         ip += match.group()
     
     # Check for VM's other than the storage controller VM on the node.
+    executeFunction(command)
     command = "vim-cmd vmsvc/getallvms | sed -n '1!p' | wc -l"
     output = os.popen(command)
     numberOfLines = int(output.read())
@@ -272,23 +273,74 @@ def cleanM2SSDM5():
     # device_model = (str(result)).strip()[13:str(result).find('.')]
     # print(device_model.strip())
 
-def cleanBackSSDM4():
+def getM4BackSSDPartitionList():
     m4PartitionList = []
-    print("in cleaning back ssd m4")
+    print("in getM4BackSSDPartitionList")
     command = "esxcli storage core device partition list | sed -n '2!p' | sed -n '1!p'"
     output = os.popen(command)
     result = output.readlines()
     partitionIndex = 0
+    temp = []
     for line in result:        
-        # partitionIndex = partitionIndex + 1
-        # print(str(partitionIndex) + ' ' + line)
-        # m4PartitionList.insert(partitionIndex, line)
         if 't10' in line:
             print('t10 in::: ' +line)
             partitionIndex = partitionIndex + 1
-            m4PartitionList.insert(partitionIndex, line)
+            line = line.split(" ")
+            temp = []
+            for index in line:
+                if index is not '':
+                    temp.append(index)
+            m4PartitionList.insert(partitionIndex, temp)
+    return m4PartitionList
         # print(line)
-    pprint(len(m4PartitionList))
+    
+
+def cleanBackSSDM4():
+    print("In cleanBackSSDM4")
+    m4PartitionList = getM4BackSSDPartitionList()    
+
+    for partition in m4PartitionList:        
+        if int(partition[1]) == 1:
+            command = 'partedUtil delete /vmfs/devices/disks/' + partition[0] + ' ' + partition[1]
+            print(command)
+    
+    # Verify that the partition has been deleted, and format SSD to a GPT disk
+    partition1Exists = 0
+    verifyM4PartitionList = getM4BackSSDPartitionList()
+    if len(m4PartitionList) == 1 and int(m4PartitionList[1]) == 0:
+        print("Back SSD on the M4 has successfully been cleaned. \n Ready to proceed to turning disk into gpt. ")
+        formatSSDToGPT()
+
+def formatSSDToGPT():
+    print("In the format SSD to GPT function")
+    m4PartitionList = getM4BackSSDPartitionList()
+    command = "partedUtil mklabel /vmfs/devices/disks/" + m4PartitionList[0] + " gpt"
+    verification_command = 'partedUtil getpbl /vmfs/devices/disks/' + m4PartitionList
+
+    print(command)
+    print(verification_command)
+
+def uninstallESXIVibs():
+    vibList = []
+    print("In the uninstallESXIVibs function")
+    command = 'esxcli software vib list | grep -i spring'
+    output = executeFunction(command)
+    temp = []
+    tempCount = 0
+    for line in output:
+        temp = []
+        tempCount = tempCount + 1
+        line = line.split(" ")
+        for index in line:    
+            if(index is not ''):
+                temp.append(index)            
+        vibList.insert(tempCount, temp)    
+    for vib in vibList:
+        command = 'esxcli software vib remove -n ' + vib[0]
+        print(command)
+    # print(len(vibList))
+
+    # This function formats the SSD into a GPT disk
     # print(m4PartitionList[0])
     # print(m4PartitionList[1])
                 
@@ -303,6 +355,14 @@ def cleanBackSSDM4():
     #     print(result)
     # device_model = (str(result)).strip()[13:str(result).find('.')]
     # print(device_model.strip())
+
+def executeFunction(command):
+    print("Executing: " + command)
+    output = os.popen(command)
+    result = output.readlines()
+    output.close()
+    return result
+
 
 
 def main():
@@ -334,6 +394,7 @@ def main():
     # Clean up SSD's
     # Uninstall HX Vibs
     # Reboot
+    uninstallESXIVibs()
 
 if __name__ == "__main__":
     main()
