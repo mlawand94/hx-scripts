@@ -204,10 +204,11 @@ def deleteDataStores():
         for ds in setOfDataStores:
             command = "esxcfg-nas -d " + ds
             print(command)
-        cleanBackSSD()
+        cleanInternalSSD()
+
 filesystem_list = []
 ssd_cleanup_commands = ['esxcli system coredump file remove --force', 'esxcfg-dumppart -d', 'rm /scratch', ]
-def cleanBackSSD():
+def cleanInternalSSD():
     counter = 0
     command = 'esxcli storage filesystem list'
     output = os.popen(command)
@@ -240,8 +241,69 @@ def cleanBackSSD():
     command6 = 'kill -9 ' + str(process)
     command7 = 'esxcli storage filsystem unmount -p /vmfs/volumes/' + str(uuid)
     # Get the hardware to confirm how we will be cleaning the SSD's
-    command8 = 'esxcli hardware platform get | grep -i "product name"'
+    serverModel = getServerModel()
+    if serverModel == 'HX240C-M4S' or serverModel == 'HXAF240C-M4S':
+        print("This is an M4 that needs back SSD's cleaned")
+        cleanBackSSDM4()
+    elif serverModel == 'HX240C-M5S' or serverModel == 'HXAF240C-M5S':
+        print("This node has an M.2 SSD that needs cleaning")
+        cleanM2SSDM5()
+    else:
+        print("This node does not have an M.2 SSD or back SSD that needs to be cleaned. Moving on..")
+
+    # cleanBackSSDM4()
     # esxcli network vswitch standard remove -v "asdf"
+
+def getServerModel():
+    command = 'esxcli hardware platform get | grep -i "product name"'
+    output = os.popen(command)
+    result = output.read()
+    if str(result).startswith('Product Name:'):
+        print(result)
+    device_model = ((str(result)).strip()[13:str(result).find('.')]).strip()    
+    return device_model
+
+def cleanM2SSDM5():
+    command = 'esxcli hardware platform get | grep -i "product name"'
+    # output = os.popen(command)
+    # result = output.read()
+    # if str(result).startswith('Product Name:'):
+    #     print(result)
+    # device_model = (str(result)).strip()[13:str(result).find('.')]
+    # print(device_model.strip())
+
+def cleanBackSSDM4():
+    m4PartitionList = []
+    print("in cleaning back ssd m4")
+    command = "esxcli storage core device partition list | sed -n '2!p' | sed -n '1!p'"
+    output = os.popen(command)
+    result = output.readlines()
+    partitionIndex = 0
+    for line in result:        
+        # partitionIndex = partitionIndex + 1
+        # print(str(partitionIndex) + ' ' + line)
+        # m4PartitionList.insert(partitionIndex, line)
+        if 't10' in line:
+            print('t10 in::: ' +line)
+            partitionIndex = partitionIndex + 1
+            m4PartitionList.insert(partitionIndex, line)
+        # print(line)
+    pprint(len(m4PartitionList))
+    # print(m4PartitionList[0])
+    # print(m4PartitionList[1])
+                
+    #             m4PartitionList.insert(partitionIndex, str(line))
+    # print(m4PartitionList[0])
+    # print(m4PartitionList[1])
+
+    # command = 'esxcli hardware platform get | grep -i "product name"'
+    # output = os.popen(command)
+    # result = output.read()
+    # if str(result).startswith('Product Name:'):
+    #     print(result)
+    # device_model = (str(result)).strip()[13:str(result).find('.')]
+    # print(device_model.strip())
+
 
 def main():
     # Get Python version of the ESXi host
