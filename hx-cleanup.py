@@ -24,23 +24,22 @@ def relinquishSCVM():
 
 def sshIntoSCVM():    
     # Getting IP address of the Storage Controller VM
-    output = os.popen('/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"').readlines()
-    output = re.finditer(r'[0-9.]',str(output), re.MULTILINE)
-    ip = ''
-    for matchNum, match in enumerate(output):        
-        ip += match.group()
+    # command = '/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"'
+    # output = executeFunctionWithReadlines(command)
+    # output = os.popen('/opt/springpath/support/getstctlvmip.sh "Storage Controller Management Network"').readlines()
+    # output = re.finditer(r'[0-9.]',str(output), re.MULTILINE)
+    # ip = ''
+    # for matchNum, match in enumerate(output):        
+    #     ip += match.group()
     
     # Check for VM's other than the storage controller VM on the node.
-    executeFunction(command)
+    # executeFunction(command)
+
     command = "vim-cmd vmsvc/getallvms | sed -n '1!p' | wc -l"
-    output = os.popen(command)
-    numberOfLines = int(output.read())
-    output.close()
+    numberOfLines = int(executeFunctionWithRead(command))
 
     command = "vim-cmd vmsvc/getallvms | sed -n '1!p'"
-    output = os.popen(command)
-    vm_list = output.read()    
-    output.close()
+    vm_list = executeFunctionWithRead(command)
 
     if numberOfLines == 1:
         vm_list = vm_list.split(" ")
@@ -48,10 +47,9 @@ def sshIntoSCVM():
         vm_name = vm_list[6]        
         # Check to see if the VM is powered off    
         command = 'vim-cmd vmsvc/power.get ' + vm_id + " | sed -n '1!p'"
-        output = os.popen(command)
-        power_state = output.read()
+        power_state = executeFunctionWithRead(command)
         power_state = str(power_state.split(" ")[1].strip())
-        output.close()
+        
         
         if power_state == "on":
             print("Has the SCVM been relinquished? Input 1 for yes and 0 for no")
@@ -65,32 +63,31 @@ def sshIntoSCVM():
         
     else:
         print("Please migrate all of the VM's off of the node before continuing. Do not migrate the SCVM")
-    
-    
+        
     
 def powerOffSCVM(vm_id):
     vm_id = vm_id
     print("powering off SCVM ...")
     command = 'vim-cmd vmsvc/power.off ' + str(vm_id)
-    output = os.popen(command)
-    result = output.read()
-    time.sleep(15)
+    result = executeFunctionWithRead(command)    
     
     command = "vim-cmd vmsvc/power.get " + str(vm_id) + " | sed -n '1!p'"
-    output = os.popen(command)
-    result = str(output.read()).split(" ")[1].strip()
+    result = str(executeFunctionWithRead(command)).split(" ")[1].strip()
+    print(result)
     if result == "off":
+        print("SCVM is off")
         destroySCVM(vm_id)
     
 def destroySCVM(vm_id):
+    print("Time to destroy the scvm")
     command = 'vim-cmd vmsvc/destroy 1'
+    print(command)
+    #Implement actually executing the function
 
 portgroup_list = []
-
 def deletePortGroups():
     command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p'"
-    output = os.popen(command)
-    result = output.readlines()
+    result = executeFunctionWithReadlines(command)    
     listCounter = 0
     for line in result:
         line = line.split("  ")
@@ -324,7 +321,7 @@ def uninstallESXIVibs():
     vibList = []
     print("In the uninstallESXIVibs function")
     command = 'esxcli software vib list | grep -i spring'
-    output = executeFunction(command)
+    output = executeFunctionWithReadlines(command)
     temp = []
     tempCount = 0
     for line in output:
@@ -337,32 +334,29 @@ def uninstallESXIVibs():
         vibList.insert(tempCount, temp)    
     for vib in vibList:
         command = 'esxcli software vib remove -n ' + vib[0]
-        print(command)
-    # print(len(vibList))
+        commandOutput = executeFunctionWithReadlines(command)
+        for response in commandOutput:
+            if 'Message' in response and 'successfully' in response:                
+                print("Success in removing Vib.. moving on..")
+                print(response)
+            elif('Reboot Required' in response and 'true' in response):
+                print("ESXi needs to reboot to remove " + vib[0])
+                print(response)
 
-    # This function formats the SSD into a GPT disk
-    # print(m4PartitionList[0])
-    # print(m4PartitionList[1])
-                
-    #             m4PartitionList.insert(partitionIndex, str(line))
-    # print(m4PartitionList[0])
-    # print(m4PartitionList[1])
-
-    # command = 'esxcli hardware platform get | grep -i "product name"'
-    # output = os.popen(command)
-    # result = output.read()
-    # if str(result).startswith('Product Name:'):
-    #     print(result)
-    # device_model = (str(result)).strip()[13:str(result).find('.')]
-    # print(device_model.strip())
-
-def executeFunction(command):
+def executeFunctionWithReadlines(command):
     print("Executing: " + command)
     output = os.popen(command)
     result = output.readlines()
     output.close()
     return result
 
+def executeFunctionWithRead(command):
+    print("Executing: " + command)
+    output = os.popen(command)
+    result = output.read()
+    output.close()
+    return result
+    
 
 
 def main():
@@ -376,8 +370,11 @@ def main():
         # Destroy the SCVM
         # Make sure the /vmfs/volumes/StCtlVm dir is empty
     # Get all port groups and remove them
-        # Do NOT remove vswitch-hx-inband-mgmt    
+        # Do NOT remove vswitch-hx-inband-mgmt 
+        # 
+
     deletePortGroups()
+
     # Remove the vswitches
         # List them all and remove them all
             # esxcli network vswitch standard list | grep -i name
@@ -394,7 +391,10 @@ def main():
     # Clean up SSD's
     # Uninstall HX Vibs
     # Reboot
-    uninstallESXIVibs()
+    # uninstallESXIVibs()
+
+    
+    # sshIntoSCVM()
 
 if __name__ == "__main__":
     main()
