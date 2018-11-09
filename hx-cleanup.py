@@ -135,7 +135,7 @@ def deletePortGroups():
     result = executeFunctionWithRead(command)
     result = str(result).strip()    
     print("Length of port group list: " + str(result))
-    if int(result) == 2:
+    if int(result) == 1:
         print("All necessary port groups have been deleted.. Moving on to delete the VMK's")
         deleteVMKs()
         # deleteVswitches(portgroup_list)
@@ -151,6 +151,7 @@ def deletePortGroups():
     # print(result)
 def deleteVMKs():
     print("In the delete vmk's function")
+    
     command = 'esxcli network ip interface list | grep "Name: vmk*"'
     # output = os.popen(command)
     # result = output.readlines()
@@ -176,27 +177,36 @@ def deleteVMKs():
                         if int(result) == 1:
                             # output.close()                            
                             print("All necessary VMK's have been deleted. Proceeding with deleting vswitches...")
-                            deleteVswitches()
+                            deleteVswitches(portgroup_list)
                             # deleteOrphanedSCVM()
                         else:
                             print("There was a problem with deleting the necessary VMK's. Please delete all the VMK's except vmk0 and run this script again.")
                     else:
                         if(int(executeFunctionWithRead("esxcli network ip interface list | grep -i 'Name: vmk*' | wc -l")) == 1):
                             print("Only 1 vmk... proceed to delete vswitches")
+                            deleteVswitches(portgroup_list)
 
 def deleteVswitches(portgroup_list):
     print("Deleting the vswitches")
-    for index in portgroup_list:
-        print(index["Virtual Switch"])
-        if index["Virtual Switch"] == "vswitch-hx-inband-mgmt":
-            print("Skipping: " + index["Virtual Switch"])
+    
+    command = 'esxcli network vswitch standard list | grep "Name: "'
+    result = executeFunctionWithReadlines(command)
+    vswitches = []
+    for line in result:
+        line = line.split(" ")
+        
+        for index in line:
+            if index is not '' and 'Name:' not in index:
+                vswitches.append(str(index).strip())        
+    print(vswitches)
+
+    for vswitch in vswitches:
+        if "vswitch-hx-inband-mgmt" in vswitch:
+            print("Skipping: " + str(vswitch))
         else:
-            vswitch = str(index["Virtual Switch"]).strip()
-            print(type(vswitch))
-            print("The vswitch: " + vswitch)
             command = 'esxcli network vswitch standard remove -v "'+vswitch+'"'
-            output = executeFunctionWithReadlines(command)
-            print("Deleted vswitch: " + str(output))
+            output = executeFunctionWithRead(command)
+            print(output)
 
     # Verify that vswitches have been deleted
     verification_command = 'esxcli network vswitch standard list | grep -i Name | wc -l'
@@ -205,9 +215,11 @@ def deleteVswitches(portgroup_list):
     # result = output.read()
     result = str(result).strip()
     print("Vswitch length result: " + result)
-    if int(result) == 5:
+    if int(result) == 1:
         print("All vswitches have been deleted. Proceed to delete orphaned SCVM")
         deleteOrphanedSCVM()
+    else:
+        print("There was a problem with deleting the vswitches. Please delete all of the vswitches EXCEPT vswitch-hx-inband-mgmt and run this script again. ")
         # deleteVMKs()
 
 
@@ -238,17 +250,27 @@ def deleteDataStores():
     if len(setOfDataStores) >= 1:
         for ds in setOfDataStores:
             command = "esxcfg-nas -d " + ds
+            print("Deleting datastore: " + ds + ". This may take a moment")
             print(command)
+            output = executeFunctionWithRead(command)
+            print(output)
+    verification_command = "grep -i nas /etc/vmware/esx.conf | wc -l"
+    numberOfDatastores = int(executeFunctionWithRead(verification_command))
+    if numberOfDatastores == 2:
+        print("All necessary datastores have been deleted. Proceeding to SSD cleaning.")
         cleanInternalSSD()
+    else:
+        print("Something went wrong while deleting the datastores. Please delete the datastores and run this script again.")
 
 filesystem_list = []
-ssd_cleanup_commands = ['esxcli system coredump file remove --force', 'esxcfg-dumppart -d', 'rm /scratch', ]
+set_of_commands = []
 def cleanInternalSSD():
     counter = 0
     command = 'esxcli storage filesystem list'
     result = executeFunctionWithReadlines(command)
     # output = os.popen(command)
     # result = output.readlines()
+    uuid = ''
     for line in result:
         # print(line)
         if('SpringpathDS' in line):
@@ -260,11 +282,15 @@ def cleanInternalSSD():
             uuid = filesystem_list[2]
             print(uuid)
     command2 = 'esxcli system coredump file remove --force'
+    executeFunctionWithRead(command2)
     command3 = 'esxcfg-dumppart -d'
+    executeFunctionWithRead(command3)
     command4 = 'rm /scratch'
+    executeFunctionWithRead(command4)
     command5 = 'ps | grep vmsyslogd'
-    output = os.popen(command5)
-    result = output.readlines()
+    result = executeFunctionWithReadlines(command5)
+    # output = os.popen(command5)
+    # result = output.readlines()
     zibby = []
     zibCount = 0
     for line in result:
@@ -275,7 +301,9 @@ def cleanInternalSSD():
                 zibby.insert(zibCount, index)
     process = zibby[1]
     command6 = 'kill -9 ' + str(process)
+    executeFunctionWithRead(command6)
     command7 = 'esxcli storage filsystem unmount -p /vmfs/volumes/' + str(uuid)
+    executeFunctionWithRead(command7)
     # Get the hardware to confirm how we will be cleaning the SSD's
     serverModel = getServerModel()
     if serverModel == 'HX240C-M4S' or serverModel == 'HXAF240C-M4S':
@@ -315,18 +343,18 @@ def getM4BackSSDPartitionList():
     command = "esxcli storage core device partition list | sed -n '2!p' | sed -n '1!p'"
     # output = os.popen(command)
     # result = output.readlines()
-    result = executeFunctionWithRead(command)
+    result = executeFunctionWithReadlines(command)
     partitionIndex = 0
     temp = []
-    for line in result:        
-        if 't10' in line:
-            print('t10 in::: ' +line)
+    for line in result:       
+        # print(line)        
+        if 't10' in line:            
             partitionIndex = partitionIndex + 1
             line = line.split(" ")
             temp = []
             for index in line:
                 if index is not '':
-                    temp.append(index)
+                    temp.append(index)            
             m4PartitionList.insert(partitionIndex, temp)
     return m4PartitionList
         # print(line)
@@ -334,28 +362,36 @@ def getM4BackSSDPartitionList():
 
 def cleanBackSSDM4():
     print("In cleanBackSSDM4")
-    m4PartitionList = getM4BackSSDPartitionList()    
-
-    for partition in m4PartitionList:        
+    m4PartitionList = getM4BackSSDPartitionList()  
+    
+    for partition in m4PartitionList:                
         if int(partition[1]) == 1:
             command = 'partedUtil delete /vmfs/devices/disks/' + partition[0] + ' ' + partition[1]
-            print(command)
+            executeFunctionWithReadlines(command)
     
     # Verify that the partition has been deleted, and format SSD to a GPT disk
     partition1Exists = 0
     verifyM4PartitionList = getM4BackSSDPartitionList()
-    if len(m4PartitionList) == 1 and int(m4PartitionList[1]) == 0:
+
+    if len(m4PartitionList) >= 2 and len(m4PartitionList) == 1 and int(m4PartitionList[1]) == 0:
+        print("Back SSD on the M4 has successfully been cleaned. \n Ready to proceed to turning disk into gpt. ")
+        formatSSDToGPT()        
+    elif len(getM4BackSSDPartitionList()) == 1:
         print("Back SSD on the M4 has successfully been cleaned. \n Ready to proceed to turning disk into gpt. ")
         formatSSDToGPT()
 
 def formatSSDToGPT():
     print("In the format SSD to GPT function")
-    m4PartitionList = getM4BackSSDPartitionList()
-    command = "partedUtil mklabel /vmfs/devices/disks/" + m4PartitionList[0] + " gpt"
-    verification_command = 'partedUtil getpbl /vmfs/devices/disks/' + m4PartitionList
-
-    print(command)
-    print(verification_command)
+    m4PartitionList = getM4BackSSDPartitionList()    
+    command = "partedUtil mklabel /vmfs/devices/disks/" + str(m4PartitionList[0][0]) + " gpt"
+    output = executeFunctionWithReadlines(command)
+    print(output)
+    verification_command = 'partedUtil getpbl /vmfs/devices/disks/' + m4PartitionList[0][0]
+    output = executeFunctionWithReadlines(verification_command)
+    if len(output) == 0:
+        print("Output is zero.. proceed to uninstall VIBs")
+        uninstallESXIVibs()
+    # print(verification_command)
 
 def uninstallESXIVibs():
     vibList = []
@@ -375,6 +411,7 @@ def uninstallESXIVibs():
     for vib in vibList:
         command = 'esxcli software vib remove -n ' + vib[0]
         commandOutput = executeFunctionWithReadlines(command)
+        print(commandOutput)
         for response in commandOutput:
             if 'Message' in response and 'successfully' in response:                
                 print("Success in removing Vib.. moving on..")
@@ -382,6 +419,8 @@ def uninstallESXIVibs():
             elif('Reboot Required' in response and 'true' in response):
                 print("ESXi needs to reboot to remove " + vib[0])
                 print(response)
+            elif "No VIB matching VIB search specification '" + str(vib) in str(response):
+                print("Proceed..")
 
 def executeFunctionWithReadlines(command):
     print("Executing: " + command)
