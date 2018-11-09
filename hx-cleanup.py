@@ -47,7 +47,7 @@ def sshIntoSCVM():
         vm_name = vm_list[6]        
         # Check to see if the VM is powered off    
         command = 'vim-cmd vmsvc/power.get ' + vm_id + " | sed -n '1!p'"
-        power_state = executeFunctionWithRead(command)
+        power_state = executeFunctionWithRead(command)        
         power_state = str(power_state.split(" ")[1].strip())
         
         
@@ -60,7 +60,12 @@ def sshIntoSCVM():
                 print("Please relinquish the SCVM from the cluster before proceeding.")
                 print("SSH into the storage controller VM as root. ssh root@" + ip)
                 print("Issue the command: python /usr/share/springpath/storfs-misc/relinquish_node.py ")
-        
+        elif power_state == "off":
+            print("SCVM is powered off")
+            destroySCVM(vm_id)
+    elif(numberOfLines == 0):
+        print("There are no SCVM's.. Proceeding to deleting networking")
+        deletePortGroups()
     else:
         print("Please migrate all of the VM's off of the node before continuing. Do not migrate the SCVM")
         
@@ -80,8 +85,16 @@ def powerOffSCVM(vm_id):
     
 def destroySCVM(vm_id):
     print("Time to destroy the scvm")
-    command = 'vim-cmd vmsvc/destroy 1'
-    print(command)
+    command = 'vim-cmd vmsvc/destroy ' + str(vm_id)
+    result = executeFunctionWithReadlines(command)
+    print(len(result))
+    if len(result) == 0:
+        print("SCVM has been destroyed. Proceeding to clean up the networking")
+        deletePortGroups()
+    elif(len(result) > 0 and 'vim.fault.NotFound' in result[0]):
+        print("The vm doesnt exist.. Proceeding to clean up the networking")
+        deletePortGroups()
+    # print(command)
     #Implement actually executing the function
 
 portgroup_list = []
@@ -107,22 +120,26 @@ def deletePortGroups():
                     vswitch_port_group_list["VLAN ID"] = index.strip()
         portgroup_list.insert(listCounter, vswitch_port_group_list)
     for index in portgroup_list:
-        print(index["name"])
-        print(index["Virtual Switch"])
-        if(index["Virtual Switch"] == "Management Network"):
-            print("Skipping deletion of the management network")
+        # print(index["name"])
+        # print(index["Virtual Switch"])
+        if(index["name"] == "Management Network" or index["name"] == "Storage Hypervisor Data Network"):
+            print("Skipping deletion of " + index["name"])
         else:
             command = 'esxcli network vswitch standard portgroup remove -v '+index['Virtual Switch']+' -p "'+index['name']+'"'
-            print(command)
+            output = executeFunctionWithReadlines(command)
+            print(output)
     
     command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p' | wc -l"
-    output = os.popen(command)
-    result = output.read()
+    # output = os.popen(command)
+    # result = output.read()
+    result = executeFunctionWithRead(command)
     result = str(result).strip()    
-    if int(result) == 11:
-        print("All port groups have been deleted.. Moving on to delete the vswitches")
-        deleteVswitches(portgroup_list)
-        output.close()
+    print("Length of port group list: " + str(result))
+    if int(result) == 2:
+        print("All necessary port groups have been deleted.. Moving on to delete the VMK's")
+        deleteVMKs()
+        # deleteVswitches(portgroup_list)
+        # output.close()
     else:
         print("There was a problem with deleting the port groups from the vswitches. Please delete the port groups from the vswitches and try again.")
 
@@ -132,48 +149,67 @@ def deletePortGroups():
 
     # result = result.split("  ")
     # print(result)
-
-def deleteVswitches(portgroup_list):
-    print("Deleting the vswitches")
-    for index in portgroup_list:
-        print(index["Virtual Switch"])
-        if index["Virtual Switch"] == "vswitch-hx-inband-mgmt":
-            print("Skipping vswitch-hx-inband-mgmt")
-        else:
-            command = 'esxcli network vswitch standard remove -v "'+index["Virtual Switch"]+'"'
-            print(command)
-
-    # Verify that vswitches have been deleted
-    verification_command = 'esxcli network vswitch standard list | grep -i Name | wc -l'
-    output = os.popen(verification_command)
-    result = output.read()
-    result = str(result).strip()
-
-    if int(result) == 5:
-        print("All vswitches have been deleted. Proceed to delete VMK2")
-        deleteVMKs()
-
 def deleteVMKs():
     print("In the delete vmk's function")
     command = 'esxcli network ip interface list | grep "Name: vmk*"'
-    output = os.popen(command)
-    result = output.readlines()
+    # output = os.popen(command)
+    # result = output.readlines()
+    result = executeFunctionWithReadlines(command)
     for line in result:
         line = line.split(" ")
         for index in line:
             if index != '':
                 if "vmk" in str(index):
                     index = str(index).strip()
+                    print("index: " + index[3])
                     if int(index[3]) >= 1:
                         command = "esxcli network ip interface remove -i " + index
-                        print(command)
+                        # print(command)
+                        output = executeFunctionWithReadlines(command)
+                        print(output)
                         verification_command = 'esxcli network ip interface list | grep "Name: vmk*" | wc -l'
-                        output = os.popen(verification_command)
-                        result = output.read()                        
+                        result = executeFunctionWithRead(verification_command)
+                        # output = os.popen(verification_command)
+                        # result = output.read()                        
                         result = str(result).strip()
-                        if int(result) == 2:
-                            output.close()
-                            deleteOrphanedSCVM()
+                        print("Number of VMK's : " + str(result))
+                        if int(result) == 1:
+                            # output.close()                            
+                            print("All necessary VMK's have been deleted. Proceeding with deleting vswitches...")
+                            deleteVswitches()
+                            # deleteOrphanedSCVM()
+                        else:
+                            print("There was a problem with deleting the necessary VMK's. Please delete all the VMK's except vmk0 and run this script again.")
+                    else:
+                        if(int(executeFunctionWithRead("esxcli network ip interface list | grep -i 'Name: vmk*' | wc -l")) == 1):
+                            print("Only 1 vmk... proceed to delete vswitches")
+
+def deleteVswitches(portgroup_list):
+    print("Deleting the vswitches")
+    for index in portgroup_list:
+        print(index["Virtual Switch"])
+        if index["Virtual Switch"] == "vswitch-hx-inband-mgmt":
+            print("Skipping: " + index["Virtual Switch"])
+        else:
+            vswitch = str(index["Virtual Switch"]).strip()
+            print(type(vswitch))
+            print("The vswitch: " + vswitch)
+            command = 'esxcli network vswitch standard remove -v "'+vswitch+'"'
+            output = executeFunctionWithReadlines(command)
+            print("Deleted vswitch: " + str(output))
+
+    # Verify that vswitches have been deleted
+    verification_command = 'esxcli network vswitch standard list | grep -i Name | wc -l'
+    result = executeFunctionWithRead(verification_command)
+    # output = os.popen(verification_command)
+    # result = output.read()
+    result = str(result).strip()
+    print("Vswitch length result: " + result)
+    if int(result) == 5:
+        print("All vswitches have been deleted. Proceed to delete orphaned SCVM")
+        deleteOrphanedSCVM()
+        # deleteVMKs()
+
 
 def deleteOrphanedSCVM():
     print("Please delete the orphaned SCVM from VCenter... Press 1 when this has been complete")
@@ -188,8 +224,9 @@ setOfDataStores = {}
 def deleteDataStores():
     print("Starting datastore deletion")
     command = "grep -i nas /etc/vmware/esx.conf"
-    output = os.popen(command)
-    result = output.readlines()
+    result = executeFunctionWithReadlines(command)
+    # output = os.popen(command)
+    # result = output.readlines()
     for line in result:
         if "STFSNasPlugin" in line:
             print("Not deleting " + line)
@@ -209,8 +246,9 @@ ssd_cleanup_commands = ['esxcli system coredump file remove --force', 'esxcfg-du
 def cleanInternalSSD():
     counter = 0
     command = 'esxcli storage filesystem list'
-    output = os.popen(command)
-    result = output.readlines()
+    result = executeFunctionWithReadlines(command)
+    # output = os.popen(command)
+    # result = output.readlines()
     for line in result:
         # print(line)
         if('SpringpathDS' in line):
@@ -254,8 +292,9 @@ def cleanInternalSSD():
 
 def getServerModel():
     command = 'esxcli hardware platform get | grep -i "product name"'
-    output = os.popen(command)
-    result = output.read()
+    # output = os.popen(command)
+    # result = output.read()
+    result = executeFunctionWithRead(command)
     if str(result).startswith('Product Name:'):
         print(result)
     device_model = ((str(result)).strip()[13:str(result).find('.')]).strip()    
@@ -274,8 +313,9 @@ def getM4BackSSDPartitionList():
     m4PartitionList = []
     print("in getM4BackSSDPartitionList")
     command = "esxcli storage core device partition list | sed -n '2!p' | sed -n '1!p'"
-    output = os.popen(command)
-    result = output.readlines()
+    # output = os.popen(command)
+    # result = output.readlines()
+    result = executeFunctionWithRead(command)
     partitionIndex = 0
     temp = []
     for line in result:        
@@ -364,7 +404,7 @@ def main():
     # getPythonVersion()
     # SSH into the VM and relinquish from cluster
         # https://techzone.cisco.com/t5/HyperFlex/Password-Recovery-for-STCTLVM/ta-p/988028
-    # sshIntoSCVM()
+    sshIntoSCVM()
     # Power off the SCVM
     # Delete the SCVM
         # Destroy the SCVM
@@ -373,7 +413,7 @@ def main():
         # Do NOT remove vswitch-hx-inband-mgmt 
         # 
 
-    deletePortGroups()
+    # deletePortGroups()
 
     # Remove the vswitches
         # List them all and remove them all
