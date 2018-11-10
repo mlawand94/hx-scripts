@@ -1,3 +1,7 @@
+#####################################################
+#   
+#####################################################
+
 import os
 import sys
 import subprocess
@@ -11,7 +15,7 @@ from pprint import pprint
 
 
 def getPythonVersion():
-    print("Checking version info....")
+    # print("Checking version info....")
     print(sys.version_info[0])
 
 def relinquishSCVM():
@@ -40,7 +44,7 @@ def sshIntoSCVM():
 
     command = "vim-cmd vmsvc/getallvms | sed -n '1!p'"
     vm_list = executeFunctionWithRead(command)
-
+    # Validating only 1 vm exists on the host, the SCVM
     if numberOfLines == 1:
         vm_list = vm_list.split(" ")
         vm_id = vm_list[0]
@@ -78,24 +82,22 @@ def powerOffSCVM(vm_id):
     
     command = "vim-cmd vmsvc/power.get " + str(vm_id) + " | sed -n '1!p'"
     result = str(executeFunctionWithRead(command)).split(" ")[1].strip()
-    print(result)
     if result == "off":
         print("SCVM is off")
         destroySCVM(vm_id)
+    else: 
+        print("There was a problem powering down the SCVM. Please make sure it's powered off and run this script again.")
     
 def destroySCVM(vm_id):
-    print("Time to destroy the scvm")
+    print("Destroying the SCVM")
     command = 'vim-cmd vmsvc/destroy ' + str(vm_id)
     result = executeFunctionWithReadlines(command)
-    print(len(result))
     if len(result) == 0:
         print("SCVM has been destroyed. Proceeding to clean up the networking")
         deletePortGroups()
     elif(len(result) > 0 and 'vim.fault.NotFound' in result[0]):
         print("The vm doesnt exist.. Proceeding to clean up the networking")
         deletePortGroups()
-    # print(command)
-    #Implement actually executing the function
 
 portgroup_list = []
 def deletePortGroups():
@@ -120,41 +122,28 @@ def deletePortGroups():
                     vswitch_port_group_list["VLAN ID"] = index.strip()
         portgroup_list.insert(listCounter, vswitch_port_group_list)
     for index in portgroup_list:
-        # print(index["name"])
-        # print(index["Virtual Switch"])
-        if(index["name"] == "Management Network" or index["name"] == "Storage Hypervisor Data Network"):
+        if(index["name"] == "Management Network"):
             print("Skipping deletion of " + index["name"])
         else:
             command = 'esxcli network vswitch standard portgroup remove -v '+index['Virtual Switch']+' -p "'+index['name']+'"'
             output = executeFunctionWithReadlines(command)
             print(output)
     
-    command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p' | wc -l"
-    # output = os.popen(command)
-    # result = output.read()
+    command = "esxcli network vswitch standard portgroup list | sed -n '2!p' | sed -n '1!p' | wc -l" 
     result = executeFunctionWithRead(command)
     result = str(result).strip()    
     print("Length of port group list: " + str(result))
-    if int(result) == 1:
+    if int(result) == 2 or int(result) == 1:
         print("All necessary port groups have been deleted.. Moving on to delete the VMK's")
-        deleteVMKs()
-        # deleteVswitches(portgroup_list)
-        # output.close()
+        deleteVMKs()        
     else:
         print("There was a problem with deleting the port groups from the vswitches. Please delete the port groups from the vswitches and try again.")
 
     
-    # pprint(len(portgroup_list))
-                
-
-    # result = result.split("  ")
-    # print(result)
 def deleteVMKs():
-    print("In the delete vmk's function")
+    print("Deleting VMKernel Adapters")
     
     command = 'esxcli network ip interface list | grep "Name: vmk*"'
-    # output = os.popen(command)
-    # result = output.readlines()
     result = executeFunctionWithReadlines(command)
     for line in result:
         line = line.split(" ")
@@ -165,25 +154,18 @@ def deleteVMKs():
                     print("index: " + index[3])
                     if int(index[3]) >= 1:
                         command = "esxcli network ip interface remove -i " + index
-                        # print(command)
                         output = executeFunctionWithReadlines(command)
-                        print(output)
                         verification_command = 'esxcli network ip interface list | grep "Name: vmk*" | wc -l'
-                        result = executeFunctionWithRead(verification_command)
-                        # output = os.popen(verification_command)
-                        # result = output.read()                        
+                        result = executeFunctionWithRead(verification_command)  
                         result = str(result).strip()
-                        print("Number of VMK's : " + str(result))
-                        if int(result) == 1:
-                            # output.close()                            
+                        if int(result) == 1:                    
                             print("All necessary VMK's have been deleted. Proceeding with deleting vswitches...")
                             deleteVswitches(portgroup_list)
-                            # deleteOrphanedSCVM()
                         else:
                             print("There was a problem with deleting the necessary VMK's. Please delete all the VMK's except vmk0 and run this script again.")
                     else:
                         if(int(executeFunctionWithRead("esxcli network ip interface list | grep -i 'Name: vmk*' | wc -l")) == 1):
-                            print("Only 1 vmk... proceed to delete vswitches")
+                            print("Only vmk0 exists.. proceeding to delete vswitches")
                             deleteVswitches(portgroup_list)
 
 def deleteVswitches(portgroup_list):
@@ -192,36 +174,29 @@ def deleteVswitches(portgroup_list):
     command = 'esxcli network vswitch standard list | grep "Name: "'
     result = executeFunctionWithReadlines(command)
     vswitches = []
+    # Getting the vswitches to delete
     for line in result:
-        line = line.split(" ")
-        
+        line = line.split(" ")        
         for index in line:
             if index is not '' and 'Name:' not in index:
                 vswitches.append(str(index).strip())        
-    print(vswitches)
 
     for vswitch in vswitches:
         if "vswitch-hx-inband-mgmt" in vswitch:
-            print("Skipping: " + str(vswitch))
+            print("Not deleting: " + str(vswitch) + '. Moving on..')
         else:
             command = 'esxcli network vswitch standard remove -v "'+vswitch+'"'
             output = executeFunctionWithRead(command)
-            print(output)
 
     # Verify that vswitches have been deleted
     verification_command = 'esxcli network vswitch standard list | grep -i Name | wc -l'
     result = executeFunctionWithRead(verification_command)
-    # output = os.popen(verification_command)
-    # result = output.read()
     result = str(result).strip()
-    print("Vswitch length result: " + result)
     if int(result) == 1:
         print("All vswitches have been deleted. Proceed to delete orphaned SCVM")
         deleteOrphanedSCVM()
     else:
         print("There was a problem with deleting the vswitches. Please delete all of the vswitches EXCEPT vswitch-hx-inband-mgmt and run this script again. ")
-        # deleteVMKs()
-
 
 def deleteOrphanedSCVM():
     print("Please delete the orphaned SCVM from VCenter... Press 1 when this has been complete")
@@ -247,6 +222,7 @@ def deleteDataStores():
             # print(line[2])
             listOfDataStores.append(str(line[2]))
     setOfDataStores = set(listOfDataStores)
+    
     if len(setOfDataStores) >= 1:
         for ds in setOfDataStores:
             command = "esxcfg-nas -d " + ds
@@ -256,9 +232,11 @@ def deleteDataStores():
             print(output)
     verification_command = "grep -i nas /etc/vmware/esx.conf | wc -l"
     numberOfDatastores = int(executeFunctionWithRead(verification_command))
+    print("The length of the datastores: " + str(numberOfDatastores))
     if numberOfDatastores == 2:
         print("All necessary datastores have been deleted. Proceeding to SSD cleaning.")
-        cleanInternalSSD()
+        uninstallESXIVibs()
+        # cleanInternalSSD()
     else:
         print("Something went wrong while deleting the datastores. Please delete the datastores and run this script again.")
 
@@ -363,7 +341,7 @@ def getM4BackSSDPartitionList():
 def cleanBackSSDM4():
     print("In cleanBackSSDM4")
     m4PartitionList = getM4BackSSDPartitionList()  
-    
+    time.sleep(5)
     for partition in m4PartitionList:                
         if int(partition[1]) == 1:
             command = 'partedUtil delete /vmfs/devices/disks/' + partition[0] + ' ' + partition[1]
@@ -389,8 +367,9 @@ def formatSSDToGPT():
     verification_command = 'partedUtil getpbl /vmfs/devices/disks/' + m4PartitionList[0][0]
     output = executeFunctionWithReadlines(verification_command)
     if len(output) == 0:
-        print("Output is zero.. proceed to uninstall VIBs")
-        uninstallESXIVibs()
+        print("Complete. Please reboot the server and redeploy HX. ")        
+        # cleanInternalSSD()
+        # uninstallESXIVibs()
     # print(verification_command)
 
 def uninstallESXIVibs():
@@ -411,16 +390,17 @@ def uninstallESXIVibs():
     for vib in vibList:
         command = 'esxcli software vib remove -n ' + vib[0]
         commandOutput = executeFunctionWithReadlines(command)
-        print(commandOutput)
+        # print(commandOutput)
         for response in commandOutput:
             if 'Message' in response and 'successfully' in response:                
                 print("Success in removing Vib.. moving on..")
-                print(response)
+                # print(response)
             elif('Reboot Required' in response and 'true' in response):
                 print("ESXi needs to reboot to remove " + vib[0])
-                print(response)
+                # print(response)
             elif "No VIB matching VIB search specification '" + str(vib) in str(response):
                 print("Proceed..")
+    cleanInternalSSD()
 
 def executeFunctionWithReadlines(command):
     print("Executing: " + command)
