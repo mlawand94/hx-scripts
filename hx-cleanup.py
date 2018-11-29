@@ -1,6 +1,18 @@
-#####################################################
-#   
-#####################################################
+################################################################################################
+#   This script is used to clean up an existing HyperFlex node running ESXi.                   #
+#   This script is NOT used to cleanup the cluster itself, but just the node in the cluster    #
+#   If you need to clean the cluster, run the destroy cluster command on                       #
+#   the CMIP and run this script on every ESXi host to properly clean it up                    #
+#                                                                                              #
+#   Put this script on a non-HX datastore directory under /vmfs/volumes                        #
+#   Example: /vmfs/volumes/23e5b079-c8e4b237-766d-0a8c460c9dac/                                #
+#   /vmfs/volumes/23e5b079-c8e4b237-766d-0a8c460c9dac/hx-clean.py                              #
+#   cd /vmfs/volumes/23e5b079-c8e4b237-766d-0a8c460c9dac/                                      #
+#   Run the python script: python hx-clean.py                                                  #
+#                                                                                              #
+#   If there are errors, read the errors and delete what this script is attempting to delete   #
+#   and run the script again as many times as needed until the node is completely cleaned      #
+################################################################################################
 
 import os
 import sys
@@ -307,16 +319,17 @@ def getServerModel():
 
 partitionList = []
 def cleanM2SSDM5():
-    result = getM4BackSSDPartitionList()
+    # result = getM4BackSSDPartitionList()
+    print("Skipping SSD cleaning on this M5")
 
-    for listItem in result:
+    # for listItem in result:
         # print(listItem)
-        if ((int(listItem[1]) == 0) or (int(listItem[1]) == 3)):
-            print("Skipping partition " + listItem[1])
-        else:
-            command = 'partedUtil delete /vmfs/devices/disks/' + str(listItem[0]) + ' ' + str(listItem[1])
-            print("The partedutil Command: ")
-            print(command)
+        # if ((int(listItem[1]) == 0) or (int(listItem[1]) == 3)):
+        #     print("Skipping partition " + listItem[1])
+        # else:
+        #     command = 'partedUtil delete /vmfs/devices/disks/' + str(listItem[0]) + ' ' + str(listItem[1])
+        #     print("The partedutil Command: ")
+        #     print(command)
             # executeFunctionWithReadlines(command)
     # uninstallESXIVibs()
     
