@@ -263,7 +263,7 @@ def cleanInternalSSD():
     executeFunctionWithRead(command2)
     command3 = 'esxcfg-dumppart -d'
     executeFunctionWithRead(command3)
-    command4 = 'rm /scratch'
+    command4 = 'rm -rf /scratch'
     executeFunctionWithRead(command4)
     command5 = 'ps | grep vmsyslogd'
     result = executeFunctionWithReadlines(command5)
@@ -284,17 +284,16 @@ def cleanInternalSSD():
     executeFunctionWithRead(command7)
     # Get the hardware to confirm how we will be cleaning the SSD's
     serverModel = getServerModel()
-    if serverModel == 'HX240C-M4S' or serverModel == 'HXAF240C-M4S':
-        print("This is an M4 that needs back SSD's cleaned")
-        cleanBackSSDM4()
-    elif serverModel == 'HX240C-M5S' or serverModel == 'HXAF240C-M5S':
-        print("This node has an M.2 SSD that needs cleaning")
+    print("The server model: " + serverModel)
+    if 'M5' in serverModel or 'm5' in serverModel:
+        print("This is an M5.. cleaning")
         cleanM2SSDM5()
+    elif 'M4' in serverModel or 'm4' in serverModel:
+        print("This is an M4.. cleaning")
+        cleanBackSSDM4()
     else:
         print("This node does not have an M.2 SSD or back SSD that needs to be cleaned. Moving on..")
 
-    # cleanBackSSDM4()
-    # esxcli network vswitch standard remove -v "asdf"
 
 def getServerModel():
     command = 'esxcli hardware platform get | grep -i "product name"'
@@ -306,8 +305,23 @@ def getServerModel():
     device_model = ((str(result)).strip()[13:str(result).find('.')]).strip()    
     return device_model
 
+partitionList = []
 def cleanM2SSDM5():
-    command = 'esxcli hardware platform get | grep -i "product name"'
+    result = getM4BackSSDPartitionList()
+
+    for listItem in result:
+        # print(listItem)
+        if ((int(listItem[1]) == 0) or (int(listItem[1]) == 3)):
+            print("Skipping partition " + listItem[1])
+        else:
+            command = 'partedUtil delete /vmfs/devices/disks/' + str(listItem[0]) + ' ' + str(listItem[1])
+            print("The partedutil Command: ")
+            print(command)
+            # executeFunctionWithReadlines(command)
+    # uninstallESXIVibs()
+    
+    # print(result)
+    
     # output = os.popen(command)
     # result = output.read()
     # if str(result).startswith('Product Name:'):
@@ -416,44 +430,25 @@ def executeFunctionWithRead(command):
     output.close()
     return result
     
-
+def checkSEDStatus():
+    print('Is this a SED cluster? Input 1 for yes and 0 for no')
+    sed_cluster = input()
+    if(sed_cluster == '1'):
+        print("Have the disks been unlocked? Input 1 for yes and 0 for no")
+        unlocked = input()
+        if(unlocked == "1"):
+            sshIntoSCVM()
+            print("Proceeding.. ")
+        else:
+            print("Please unlock the drives and run this script again.")
+    else:
+        print(" This is not a SED clsuter.. Proceeding")
+        sshIntoSCVM()
+    
+    
 
 def main():
-    # Get Python version of the ESXi host
-    # getPythonVersion()
-    # SSH into the VM and relinquish from cluster
-        # https://techzone.cisco.com/t5/HyperFlex/Password-Recovery-for-STCTLVM/ta-p/988028
-    sshIntoSCVM()
-    # Power off the SCVM
-    # Delete the SCVM
-        # Destroy the SCVM
-        # Make sure the /vmfs/volumes/StCtlVm dir is empty
-    # Get all port groups and remove them
-        # Do NOT remove vswitch-hx-inband-mgmt 
-        # 
-
-    # deletePortGroups()
-
-    # Remove the vswitches
-        # List them all and remove them all
-            # esxcli network vswitch standard list | grep -i name
-    # deleteVswitches()
-    # Remove the vmotion vmkernel interface (vmk2)
-    # Prompt user to delete the orphaned vm's from vc inventory - proceed when done
-    # List all datastores and delete them from the host
-        # grep -i nas /etc/vmware/esx.conf
-            # Delete them all until we only have the below outputs: 
-                # /firewall/services/STFSNasPlugin/enabled = "false"
-                # /firewall/services/STFSNasPlugin/allowedall = "true"
-    # restart hostd
-    # stop scvmclient  
-    # Clean up SSD's
-    # Uninstall HX Vibs
-    # Reboot
-    # uninstallESXIVibs()
-
-    
-    # sshIntoSCVM()
+    checkSEDStatus()
 
 if __name__ == "__main__":
     main()
