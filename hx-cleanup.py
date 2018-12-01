@@ -246,7 +246,7 @@ def deleteDataStores():
     numberOfDatastores = int(executeFunctionWithRead(verification_command))
     print("The length of the datastores: " + str(numberOfDatastores))
     if numberOfDatastores == 2:
-        print("All necessary datastores have been deleted. Proceeding to SSD cleaning.")
+        print("All necessary datastores have been deleted. Proceeding to SSD cleaning.")        
         uninstallESXIVibs()
         # cleanInternalSSD()
     else:
@@ -294,17 +294,23 @@ def cleanInternalSSD():
     executeFunctionWithRead(command6)
     command7 = 'esxcli storage filsystem unmount -p /vmfs/volumes/' + str(uuid)
     executeFunctionWithRead(command7)
-    # Get the hardware to confirm how we will be cleaning the SSD's
-    serverModel = getServerModel()
-    print("The server model: " + serverModel)
-    if 'M5' in serverModel or 'm5' in serverModel:
-        print("This is an M5.. cleaning")
-        cleanM2SSDM5()
-    elif 'M4' in serverModel or 'm4' in serverModel:
-        print("This is an M4.. cleaning")
-        cleanBackSSDM4()
+
+    print("Do we need to clean the SSD's? Note: SSD's need to be cleaned IF: \n 1. Node is being added back into a cluster running HyperFlex that is not 3.0+ \n 1. The whole cluster is being redeployed \n Input 1 for yes or 0 for no")
+    cleanSSDs = input()
+    if(cleanSSDs == "1"):
+        # Get the hardware to confirm how we will be cleaning the SSD's
+        serverModel = getServerModel()
+        print("The server model: " + serverModel)
+        if 'M5' in serverModel or 'm5' in serverModel:
+            print("This is an M5.. cleaning")
+            cleanM2SSDM5()
+        elif 'M4' in serverModel or 'm4' in serverModel:
+            print("This is an M4.. cleaning")
+            cleanBackSSDM4()
+        else:
+            print("This node does not have an M.2 SSD or back SSD that needs to be cleaned. Moving on..")
     else:
-        print("This node does not have an M.2 SSD or back SSD that needs to be cleaned. Moving on..")
+        print("Please reboot the ESXi host and redeploy HX.")
 
 
 def getServerModel():
